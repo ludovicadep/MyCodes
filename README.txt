@@ -1,1 +1,3 @@
-This repository contains the problemsets of probabilistic forecasting for the academic year 2025/2026
+This repository contains some useful codes:
+-The code of the dashboard I developed to support JSTs
+-The problemsets of probabilistic forecasting for the academic year 2025/2026
