@@ -2,7 +2,7 @@ import pandas as pd
 import pyodbc
 import re
 
-# ── Database connection ──────────────────────────────────────────────────────
+# connect to devo
 conn = pyodbc.connect("DSN=DEVO Impala 64bit")
 
 query = """
@@ -21,7 +21,7 @@ query = """
 """
 MYA = pd.read_sql(query, conn)
 
-# ── Load Excel files ─────────────────────────────────────────────────────────
+# import local files
 base = "C:/Users/depaola/Desktop/Dashboard work/"
 
 risk_areas  = pd.read_excel(base + "Risk_area_RTF.xlsx")
@@ -30,13 +30,13 @@ OSIs        = pd.read_excel(base + "OSIs.xlsx", sheet_name="OSI")
 HorAct      = pd.read_excel(base + "HorizontalActivities.xlsx")
 JST_DG      = pd.read_excel(base + "SSM_DG.xlsx")
 
-# ── Split SSPs and RTF ───────────────────────────────────────────────────────
+# Split SSPs and RTF 
 SSP_obj = RTF_Extract[RTF_Extract["data_name"].str.startswith("SSP_Objective")].copy()
 
 # Add DG to RTF
 RTF = RTF_Extract.merge(JST_DG, on="jst_code", how="left").rename(columns={"ssm_dg": "DG"})
 
-# ── Filter RTF to legend entries ─────────────────────────────────────────────
+# create legend for risk areas
 legend = [
     "SSP_RTF_CRE_Other_tolerance", "SSP_RTF_CRE_tolerance1_final",
     "SSP_RTF_E1_BM_Other_tolerance", "SSP_RTF_E1_BM_tolerance1_final",
@@ -65,7 +65,7 @@ if "data_name_x" in RTF.columns:
 
 RTF["Key"] = RTF["srep_cycle"].astype(str) + "_" + RTF["jst_code"] + "_" + RTF["risk_area"]
 
-# ── Primary risk mapping ─────────────────────────────────────────────────────
+# map risk areas to primary risk categories
 primary_risk_map = {
     "Gov_mangement_bodies":             "IGRM",
     "BM_Digital_transformation_strategies": "Business_model",
@@ -79,7 +79,7 @@ primary_risk_map = {
 }
 RTF["Primary_risk"] = RTF["risk_area"].replace(primary_risk_map)
 
-# ── SSP objectives ───────────────────────────────────────────────────────────
+# SSP objectives
 ssp_conversion = {
     "CCR": "Credit_risk", "BM": "Business_model",
     "OR": "Operational_risk", "CA": "Capital_adequacy",
@@ -100,7 +100,7 @@ SSP_obj["Key"] = (SSP_obj["srep_cycle"].astype(str) + "_"
 
 RTF["is_obj"] = RTF["Key"].isin(SSP_obj["Key"]).map({True: "Yes", False: "No"})
 
-# ── OSIs ─────────────────────────────────────────────────────────────────────
+# On site inspections
 OSIs["jst_code"] = OSIs["ID"].str[9:14]
 
 mask = OSIs["Strategic objective"] == "No connection with SSM strategic objectives"
@@ -131,7 +131,7 @@ RTF["N_OSIs"] = RTF["N_OSIs"].fillna(0).astype(int)
 topic_osis = OSIs.groupby("Key")["Label"].apply(lambda x: ", ".join(x)).rename("Topic")
 RTF = RTF.merge(topic_osis, on="Key", how="left")
 
-# ── Horizontal activities ─────────────────────────────────────────────────────
+# horizontal activities (downloaded locally)
 horact_conversion = {
     "ClimateR - Physical and transition risk drivers":     "ClimateR_Management_of_CE_risks",
     "CR - CR management framework":                        "CR_management_framework",
@@ -150,7 +150,7 @@ horact_counts = HorAct.groupby("Key").size().rename("N_Horizontal")
 RTF = RTF.merge(horact_counts, on="Key", how="left")
 RTF["N_Horizontal"] = RTF["N_Horizontal"].fillna(0).astype(int)
 
-# ── SREP scores ───────────────────────────────────────────────────────────────
+# SREP scores
 MYA_info = pd.read_excel(base + "MYA_Assessment.xlsx")
 
 MYA_info.loc[MYA_info["element_shortname"].str.startswith("CAP", na=False), "element_risk"] = "CAP"
@@ -179,7 +179,7 @@ overall_mask = (
 overall_SREP = MYA_info[overall_mask][["Key", "element_fullname", "jst_code", "srep_cycle", "latest_score"]]
 RTF = RTF.merge(overall_SREP, on=["jst_code", "srep_cycle"], how="left")
 
-# ── MYA update status ─────────────────────────────────────────────────────────
+# add MYA
 mya_filtered = MYA_info[~MYA_info["element_shortname"].str.endswith("Combined score", na=False)]
 
 def agg_modules(group, condition, col="element_shortname"):
@@ -225,7 +225,7 @@ RTF["Updated_Percentage"] = (
     .astype(str) + "%"
 )
 
-# ── Readiness / FTEs ──────────────────────────────────────────────────────────
+# from readiness survey (local) add FTEs and readiness
 Readiness = pd.read_excel(
     "P:/ECB business areas/SSM-DSSR/Strategic and Planning office/"
     "PBI extraction files [Do not delete or move]/FTEs.xlsx",
@@ -250,6 +250,5 @@ RTF = RTF.merge(Readiness, on="Key", how="left", suffixes=("", "_r"))
 drop_cols = [c for c in RTF.columns if c.endswith("_r")]
 RTF = RTF.drop(columns=drop_cols)
 
-# ── Export ────────────────────────────────────────────────────────────────────
 RTF.to_csv("RTF_objectives_trial.csv", index=False)
 print("Done — saved to RTF_objectives_trial.csv")
